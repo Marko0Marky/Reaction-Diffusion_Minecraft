@@ -1,0 +1,1426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced RD Voxel Terrain World</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+        body { 
+            margin: 0; overflow: hidden; 
+            background: linear-gradient(180deg, #87CEEB 0%, #98D8E8 50%, #5080a0 100%);
+            color: #fff; font-family: 'Orbitron', monospace; cursor: none; 
+        }
+        #container { width: 100vw; height: 100vh; position: relative; }
+        #controls { 
+            position: absolute; top: 10px; left: 10px; 
+            background: rgba(0,0,0,0.85); padding: 20px; border-radius: 15px; 
+            color: #9f9; max-width: 320px; z-index: 10;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(159, 255, 159, 0.3);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        label { display: block; margin-bottom: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+        input[type="range"], select { 
+            width: 100%; margin-bottom: 12px; 
+            background: rgba(159, 255, 159, 0.1);
+            border: 1px solid rgba(159, 255, 159, 0.3);
+            border-radius: 5px;
+            color: #fff; /* For select dropdown text */
+        }
+        button { 
+            background: linear-gradient(145deg, #0a0, #0c0); 
+            border: none; color: #000; padding: 10px 15px; 
+            border-radius: 8px; cursor: pointer; margin: 3px; 
+            font-family: 'Orbitron', monospace; font-weight: bold;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 170, 0, 0.3);
+        }
+        button:hover { 
+            background: linear-gradient(145deg, #0c0, #0e0); 
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 170, 0, 0.4);
+        }
+        button:active { transform: translateY(0px); }
+        #crosshair { 
+            position: absolute; top: 50%; left: 50%; 
+            width: 20px; height: 20px; 
+            transform: translate(-50%, -50%); z-index: 100; pointer-events: none;
+            display: none; /* Initially hidden, JS will toggle */
+        }
+        #crosshair::before, #crosshair::after {
+            content: ''; position: absolute; background: rgba(255,255,255,0.8);
+            mix-blend-mode: difference;
+        }
+        #crosshair::before { /* vertical line */
+            width: 2px; height: 20px; left: 9px; top: 0;
+        }
+        #crosshair::after { /* horizontal line */
+            width: 20px; height: 2px; left: 0; top: 9px;
+        }
+        .value-display { color: #5af; font-weight: bold; }
+        #block-selector { margin-top: 15px; } /* This div seems to be missing in HTML, but style is here */
+        #info { 
+            position: absolute; bottom: 80px; left: 10px; /* Adjusted for inventory */
+            font-size: 11px; background: rgba(0,0,0,0.8); 
+            padding: 12px; border-radius: 8px; 
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255,255,255,0.2);
+            max-width: 300px;
+        }
+        #cursor {
+            position: fixed; width: 15px; height: 15px; 
+            border: 2px solid #9f9; border-radius: 50%;
+            pointer-events: none; z-index: 9999; 
+            transition: all 0.15s ease; transform-origin: center center;
+            box-shadow: 0 0 10px rgba(159, 255, 159, 0.5);
+        }
+        #cursor.active { 
+            transform: scale(0.7); border-color: #ff5577; 
+            box-shadow: 0 0 15px rgba(255, 85, 119, 0.7);
+        }
+        .control-group { margin-bottom: 15px; }
+        h3 { 
+            margin-top: 0; margin-bottom: 12px; font-size: 14px; 
+            color: #cfc; text-shadow: 0 0 5px rgba(204, 255, 204, 0.5);
+        }
+        #inventory {
+            position: absolute; bottom: 10px; left: 50%;
+            transform: translateX(-50%);
+            display: flex; gap: 6px; /* Reduced gap */
+            background: rgba(0,0,0,0.8);
+            padding: 8px; border-radius: 10px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .inventory-slot {
+            width: 44px; height: 44px; /* Slightly smaller */
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 9px; color: #fff;
+            transition: all 0.2s ease;
+            position: relative;
+            cursor: pointer;
+            overflow: hidden; /* To contain block preview nicely */
+        }
+        .inventory-slot .block-preview {
+            width: 28px; height: 28px; border-radius: 4px;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.3);
+        }
+        .inventory-slot.active {
+            border-color: #9f9;
+            box-shadow: 0 0 15px rgba(159, 255, 159, 0.5);
+            transform: scale(1.1);
+        }
+        .inventory-slot:hover:not(.active) {
+            border-color: #5af;
+            transform: scale(1.05);
+        }
+        #stats {
+            position: absolute; top: 10px; right: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 15px; border-radius: 10px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            min-width: 200px; font-size: 11px;
+        }
+        .stat-item {
+            display: flex; justify-content: space-between;
+            margin-bottom: 6px;
+        }
+        .stat-item span:first-child { color: #bbb; }
+        #minimap {
+            position: absolute; top: calc(10px + 40px + 10px + 120px); /* Adjusted below stats, considering stats height */
+            /* Height of stats is approx: h3 (20) + 5*stat-item (5* (11+6) = 85) + padding (30) = ~135px. 
+               So this needs to be updated dynamically or set to a larger fixed value if stats content changes.
+               For now, assuming stats is about 150px height. top: calc(10px + 150px + 10px)*/
+            right: 10px; 
+            width: 128px; height: 128px; /* Multiple of 64 for easier scaling */
+            background: rgba(0,0,0,0.7);
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 10px;
+            backdrop-filter: blur(8px);
+        }
+        /* A more robust way for minimap position if stats height is variable:
+           Place Stats and Minimap in a container div, then use flex-direction: column.
+           Or, calculate dynamically in JS. For now, increasing the offset.
+        */
+        #minimap { top: 180px; /* Simplified fixed position below stats, adjust if stats height changes */ }
+
+
+        #minimapCanvas { width: 100%; height: 100%; } /* Canvas will be scaled */
+        .time-cycle {
+            position: absolute; top: 10px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            padding: 8px 15px; border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            display: flex; align-items: center; gap: 8px;
+            font-size: 11px;
+        }
+        .sun-moon {
+            width: 18px; height: 18px; border-radius: 50%;
+            transition: background 1s ease-in-out;
+        }
+        .sun { background: radial-gradient(circle, #ffeb3b, #ff9800); box-shadow: 0 0 10px #ffeb3b; }
+        .moon { background: radial-gradient(circle, #e3f2fd, #90caf9); box-shadow: 0 0 10px #e3f2fd; }
+        
+        /* Loading Screen (Optional but good for UX) */
+        #loading-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #111; z-index: 1000;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: #fff;
+        }
+        #loading-text { font-size: 24px; margin-bottom: 20px; }
+        #loading-bar-container { width: 80%; max-width: 300px; height: 20px; background: #444; border-radius: 10px; overflow: hidden; margin: 0 auto;}
+        #loading-bar { width: 0%; height: 100%; background: #0f0; transition: width 0.5s ease; }
+
+    </style>
+</head>
+<body>
+    <div id="loading-screen">
+        <div id="loading-text">Generating World...</div>
+        <div id="loading-bar-container"><div id="loading-bar"></div></div>
+    </div>
+
+    <div id="cursor"></div>
+    <div id="container"></div> <!-- Three.js canvas will be appended here -->
+    <div id="crosshair"></div> <!-- Empty div, styled by CSS and JS -->
+    
+    <div class="time-cycle">
+        <div class="sun-moon sun" id="sunMoon"></div>
+        <span id="timeDisplay">Day 1 - 06:00</span>
+    </div>
+    
+    <div id="stats">
+        <h3>📊 Player Stats</h3>
+        <div class="stat-item">
+            <span>Health:</span>
+            <span id="healthDisplay" style="color: #ff6b6b;">♥♥♥♥♥ 100%</span>
+        </div>
+        <div class="stat-item">
+            <span>Position:</span>
+            <span id="positionDisplay">0, 0, 0</span>
+        </div>
+        <div class="stat-item">
+            <span>Blocks Placed:</span>
+            <span id="blocksPlacedDisplay">0</span>
+        </div>
+        <div class="stat-item">
+            <span>Blocks Broken:</span>
+            <span id="blocksBrokenDisplay">0</span>
+        </div>
+        <div class="stat-item">
+            <span>Current Biome:</span>
+            <span id="biomeDisplay">Plains</span>
+        </div>
+    </div>
+    
+    <div id="minimap">
+        <canvas id="minimapCanvas"></canvas>
+    </div>
+    
+    <div id="controls">
+        <h3>⚙️ Terrain RD Controls</h3>
+        <div class="control-group">
+            <label>Feed Rate (f): <span class="value-display" id="feedRateTerrainVal">0.037</span></label>
+            <input type="range" id="feedRateTerrain" min="0.010" max="0.100" step="0.001" value="0.037">
+        </div>
+        <div class="control-group">
+            <label>Kill Rate (k): <span class="value-display" id="killRateTerrainVal">0.060</span></label>
+            <input type="range" id="killRateTerrain" min="0.040" max="0.080" step="0.001" value="0.060">
+        </div>
+        <div class="control-group">
+            <label>Max Terrain Height: <span class="value-display" id="heightScaleTerrainVal">15</span></label>
+            <input type="range" id="heightScaleTerrain" min="5" max="40" step="1" value="15">
+        </div>
+        <button id="resetTerrainSimButton" title="Completely regenerates the world">🔄 Reset World</button>
+        <button id="addSeedTerrainButton" title="Adds a new chemical seed to the terrain simulation">🌱 Add Seed</button>
+        <button id="generateStructuresButton" title="Adds simple structures to the world">🏠 Structures</button>
+    </div>
+    
+    <div id="inventory">
+        <!-- Slots will be generated by JS -->
+    </div>
+    
+    <div id="info">
+        <strong>🎮 Controls:</strong><br>
+        LMB: Break | RMB: Place | WASD: Move<br>
+        Space: Jump/Fly Up | Shift: Fly Down<br>
+        Mouse: Look | 1-8: Select Block | F: Toggle Fly<br>
+        C: Toggle Creative | E: Toggle Effects
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+        import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js';
+
+
+        let scene, camera, renderer, controls;
+        const world = {}; // Store blocks as world[key] = mesh or placeholder
+        const blockSize = 1;
+        const worldBaseY = 0;
+        const CHUNK_SIZE = 16; 
+
+        const player = {
+            height: 1.8, speed: 6, sprintSpeed: 9, jumpVelocity: 7.5,
+            velocity: new THREE.Vector3(), onGround: false,
+            flyMode: false, creativeMode: false, isSprinting: false,
+            reachDistance: 7 * blockSize,
+            useAlternativeControls: false // Will be set if PointerLock is not supported
+        };
+
+        const gameStats = {
+            blocksPlaced: 0, blocksBroken: 0, timeOfDay: 6.0, day: 1, health: 100,
+            timeSpeed: 480 
+        };
+
+        const TERRAIN_GRID_SIZE_X = 64; 
+        const TERRAIN_GRID_SIZE_Z = 64;
+        let terrainRdParams = { f: 0.037, k: 0.060, dA: 1.0, dB: 0.5 };
+        let terrainHeightScale = 15;
+        let terrainGridA, terrainGridB, newTerrainGridA, newTerrainGridB;
+        let oldTerrainHeights = new Array(TERRAIN_GRID_SIZE_X).fill(null).map(() => new Int8Array(TERRAIN_GRID_SIZE_Z));
+        const perlin = new ImprovedNoise();
+
+        // const RENDER_DISTANCE = 4; // Chunks - not fully used for meshing yet
+        // const activeChunks = new Map(); 
+        // const blockColliders = new Map(); 
+
+        const BLOCK_TYPES = { 
+            AIR: { id: 0, name: 'AIR', transparent: true },
+            STONE: { id: 1, name: 'STONE', color: 0x787878, material: null },
+            DIRT: { id: 2, name: 'DIRT', color: 0x8B5A2B, material: null },
+            GRASS: { id: 3, name: 'GRASS', color: 0x3E8E41, material: null },
+            WOOD: { id: 4, name: 'WOOD', color: 0x966F33, material: null },
+            LEAVES: { id: 5, name: 'LEAVES', color: 0x228B22, material: null, transparent: true, opacity: 0.85 },
+            WATER: { id: 6, name: 'WATER', color: 0x4169E1, material: null, transparent: true, opacity: 0.65 },
+            SAND: { id: 7, name: 'SAND', color: 0xF4A460, material: null },
+            GLOWSTONE: { id: 8, name: 'GLOWSTONE', color: 0xFFFF99, material: null, emissive: 0xFFFF66, lightIntensity: 0.7, lightDistance: 8 }
+        };
+        let inventoryBlockTypes = [
+            BLOCK_TYPES.STONE.name, BLOCK_TYPES.DIRT.name, BLOCK_TYPES.GRASS.name,
+            BLOCK_TYPES.WOOD.name, BLOCK_TYPES.LEAVES.name, BLOCK_TYPES.WATER.name,
+            BLOCK_TYPES.SAND.name, BLOCK_TYPES.GLOWSTONE.name
+        ];
+        let currentInventorySlot = 0;
+        let currentBlockToPlace = inventoryBlockTypes[currentInventorySlot];
+        
+        let enhancedEffects = true; 
+        let ambientLight, directionalLight;
+        const pointLights = new Map(); 
+        let skyColor = new THREE.Color(0x87CEEB);
+        
+        let minimapCanvas, minimapCtx;
+        let cursorDiv;
+        let lastTime;
+        let terrainRdUpdateCounter = 0;
+        let minimapUpdateCounter = 0;
+        const keys = {};
+
+        function checkPointerLockSupport() {
+            return 'pointerLockElement' in document || 
+                   'mozPointerLockElement' in document || 
+                   'webkitPointerLockElement' in document;
+        }
+
+        init();
+
+        async function init() {
+            showLoadingScreen("Initializing...");
+            
+            if (!checkPointerLockSupport()) {
+                const warning = document.createElement('div');
+                warning.style.position = 'absolute';
+                warning.style.top = '10px';
+                warning.style.left = '10px';
+                warning.style.color = 'red';
+                warning.style.background = 'rgba(0,0,0,0.7)';
+                warning.style.padding = '10px';
+                warning.style.borderRadius = '5px';
+                warning.style.zIndex = '1000';
+                warning.innerHTML = 'Your browser does not support Pointer Lock API. Controls may not work properly.';
+                document.body.appendChild(warning);
+                player.useAlternativeControls = true;
+            }
+            
+            scene = new THREE.Scene();
+            updateSkyColor(); 
+            scene.fog = new THREE.Fog(skyColor, CHUNK_SIZE * 1.5, CHUNK_SIZE * 5); 
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, CHUNK_SIZE * 6);
+            camera.position.set(0, worldBaseY + terrainHeightScale + player.height + 5, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('container').appendChild(renderer.domElement);
+
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.3); 
+            scene.add(ambientLight);
+            
+            directionalLight = new THREE.DirectionalLight(0xffffff, 0.6); 
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 1024; 
+            directionalLight.shadow.mapSize.height = 1024;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = CHUNK_SIZE * 4;
+            const shadowCamSize = CHUNK_SIZE * 1.5;
+            directionalLight.shadow.camera.left = -shadowCamSize;
+            directionalLight.shadow.camera.right = shadowCamSize;
+            directionalLight.shadow.camera.top = shadowCamSize;
+            directionalLight.shadow.camera.bottom = -shadowCamSize;
+            scene.add(directionalLight);
+            updateLightPosition(); 
+
+            if (player.useAlternativeControls) {
+                console.log("Pointer Lock not fully supported or enabled. Consider alternative controls.");
+            } else {
+                controls = new PointerLockControls(camera, document.body);
+                controls.addEventListener('lock', function() {
+                    document.getElementById('crosshair').style.display = 'block';
+                });
+                controls.addEventListener('unlock', function() {
+                    document.getElementById('crosshair').style.display = 'none';
+                });
+            }
+            
+            document.addEventListener('click', function(event) {
+                if (controls && !player.useAlternativeControls && // Check controls exists and we are not using alternatives
+                    !event.target.closest('#controls') && 
+                    !event.target.closest('#inventory') && 
+                    !event.target.closest('#info') &&
+                    !document.pointerLockElement) {
+                    controls.lock();
+                }
+            });
+            
+            minimapCanvas = document.getElementById('minimapCanvas');
+            minimapCtx = minimapCanvas.getContext('2d');
+            minimapCanvas.width = TERRAIN_GRID_SIZE_X; 
+            minimapCanvas.height = TERRAIN_GRID_SIZE_Z;
+            
+            cursorDiv = document.getElementById('cursor');
+            if (cursorDiv) {
+                document.addEventListener('mousemove', (e) => {
+                    cursorDiv.style.left = e.clientX - cursorDiv.offsetWidth / 2 + 'px';
+                    cursorDiv.style.top = e.clientY - cursorDiv.offsetHeight / 2 + 'px';
+                });
+                document.addEventListener('mousedown', () => cursorDiv.classList.add('active'));
+                document.addEventListener('mouseup', () => cursorDiv.classList.remove('active'));
+            }
+
+            initMaterials();
+            initTerrainRDSimulation();
+            
+            updateLoadingScreen("Simulating Terrain...", 20);
+            for(let i=0; i<30; i++) updateGrayScottForTerrain(); 
+            
+            updateLoadingScreen("Building World...", 50);
+            await buildFullWorldFromTerrainGrid(true); 
+            
+            updateLoadingScreen("Growing Flora...", 80);
+            generateTreesOnTerrain(Math.floor((TERRAIN_GRID_SIZE_X * TERRAIN_GRID_SIZE_Z) / 100)); 
+
+            setupUI();
+            setupInventory();
+
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            document.addEventListener('mousedown', onMouseDown);
+            document.addEventListener('wheel', onMouseWheel, { passive: false });
+            document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+            updateLoadingScreen("Finalizing...", 95);
+            hideLoadingScreen();
+            
+            lastTime = performance.now();
+            animate();
+        }
+
+        function showLoadingScreen(message, progress = 0) {
+            document.getElementById('loading-screen').style.display = 'flex';
+            updateLoadingScreen(message, progress);
+        }
+
+        function updateLoadingScreen(message, progress) {
+            document.getElementById('loading-text').textContent = message;
+            document.getElementById('loading-bar').style.width = `${progress}%`;
+        }
+
+        function hideLoadingScreen() {
+            document.getElementById('loading-screen').style.display = 'none';
+        }
+        
+        function initMaterials() {
+            for (const typeName in BLOCK_TYPES) {
+                const type = BLOCK_TYPES[typeName];
+                if (type.id > 0) { // Skip AIR
+                    const materialProps = {
+                        color: type.color,
+                        transparent: type.transparent || false,
+                        opacity: type.opacity !== undefined ? type.opacity : 1,
+                    };
+                    if (type.emissive) {
+                        materialProps.emissive = type.emissive;
+                        // materialProps.emissiveIntensity - if needed, usually controlled by light source.
+                    }
+                    type.material = new THREE.MeshLambertMaterial(materialProps);
+                    if (type.transparent) {
+                         type.material.side = THREE.DoubleSide; 
+                         type.material.depthWrite = type.name !== 'WATER'; 
+                    }
+                }
+            }
+        }
+        
+        function initTerrainRDSimulation() {
+            terrainGridA = new Array(TERRAIN_GRID_SIZE_X).fill(null).map(() => new Float32Array(TERRAIN_GRID_SIZE_Z).fill(1.0));
+            terrainGridB = new Array(TERRAIN_GRID_SIZE_X).fill(null).map(() => new Float32Array(TERRAIN_GRID_SIZE_Z).fill(0.0));
+            newTerrainGridA = new Array(TERRAIN_GRID_SIZE_X).fill(null).map(() => new Float32Array(TERRAIN_GRID_SIZE_Z).fill(1.0));
+            newTerrainGridB = new Array(TERRAIN_GRID_SIZE_X).fill(null).map(() => new Float32Array(TERRAIN_GRID_SIZE_Z).fill(0.0));
+            seedTerrainSim(Math.floor((TERRAIN_GRID_SIZE_X + TERRAIN_GRID_SIZE_Z) / 10));
+        }
+
+        function seedTerrainSim(count = 1) {
+            for (let n = 0; n < count; n++) {
+                const cx = Math.floor(Math.random() * (TERRAIN_GRID_SIZE_X - 10)) + 5;
+                const cz = Math.floor(Math.random() * (TERRAIN_GRID_SIZE_Z - 10)) + 5;
+                const r = Math.floor(Math.min(TERRAIN_GRID_SIZE_X, TERRAIN_GRID_SIZE_Z) / (8 + Math.random() * 12));
+                for (let i = -r; i <= r; i++) {
+                    for (let j = -r; j <= r; j++) {
+                        const px = cx + i;
+                        const pz = cz + j;
+                        if (px >= 0 && px < TERRAIN_GRID_SIZE_X && pz >= 0 && pz < TERRAIN_GRID_SIZE_Z && (i * i + j * j <= r * r)) {
+                            terrainGridB[px][pz] = 0.35 + Math.random() * 0.4; 
+                            terrainGridA[px][pz] = 0.4 + Math.random() * 0.2;
+                        }
+                    }
+                }
+            }
+        }
+
+        function updateGrayScottForTerrain() {
+            const { f, k, dA, dB } = terrainRdParams;
+            const dt = 0.7; 
+            for (let x = 1; x < TERRAIN_GRID_SIZE_X - 1; x++) {
+                for (let z = 1; z < TERRAIN_GRID_SIZE_Z - 1; z++) {
+                    const a = terrainGridA[x][z];
+                    const b = terrainGridB[x][z];
+                    const laplaceA = (terrainGridA[x-1][z] + terrainGridA[x+1][z] + terrainGridA[x][z-1] + terrainGridA[x][z+1] - 4 * a);
+                    const laplaceB = (terrainGridB[x-1][z] + terrainGridB[x+1][z] + terrainGridB[x][z-1] + terrainGridB[x][z+1] - 4 * b);
+                    const reaction = a * b * b;
+                    newTerrainGridA[x][z] = Math.max(0, Math.min(1, a + (dA * laplaceA - reaction + f * (1 - a)) * dt));
+                    newTerrainGridB[x][z] = Math.max(0, Math.min(1, b + (dB * laplaceB + reaction - (k + f) * b) * dt));
+                }
+            }
+            [terrainGridA, newTerrainGridA] = [newTerrainGridA, terrainGridA];
+            [terrainGridB, newTerrainGridB] = [newTerrainGridB, terrainGridB];
+        }
+        
+        function updateSkyColor() { // Used in init and then by updateSkyAndLight
+            const hour = gameStats.timeOfDay;
+            if (hour < 5 || hour > 21) { skyColor.setRGB(0.05, 0.05, 0.15); } // Night
+            else if (hour < 6 || hour > 20) { skyColor.setRGB(0.2, 0.15, 0.3); } // Dawn/Dusk (Twilight)
+            else if (hour < 8 || hour > 18) { skyColor.setRGB(0.8, 0.4, 0.2); } // Early morning/Late afternoon (Sunrise/Sunset colors)
+            else { skyColor.setRGB(0.53, 0.81, 0.92); } // Day
+            
+            if (scene) { // scene might not be initialized yet if called very early
+                scene.background = skyColor;
+                if (scene.fog) {
+                    scene.fog.color.copy(skyColor);
+                }
+            }
+        }
+
+        function updateSkyAndLight() {
+            const hour = gameStats.timeOfDay;
+            let skyR, skyG, skyB;
+            let ambIntensity, dirIntensity;
+
+            if (hour < 5 || hour > 21) { // Deep Night
+                skyR = 0.05; skyG = 0.05; skyB = 0.15; ambIntensity = 0.1; dirIntensity = 0.05;
+                directionalLight.color.setHex(0xaaaaff); // Moonlight color
+            } else if (hour < 6 || hour > 20) { // Twilight
+                skyR = 0.2; skyG = 0.15; skyB = 0.3; ambIntensity = 0.2; dirIntensity = 0.2;
+                directionalLight.color.setHex(0xffddaa);
+            } else if (hour < 8 || hour > 18) { // Dawn/Dusk Colors
+                skyR = 0.8; skyG = 0.4; skyB = 0.2; ambIntensity = 0.4; dirIntensity = 0.6;
+                directionalLight.color.setHex(0xffaa55);
+            } else { // Day
+                skyR = 0.53; skyG = 0.81; skyB = 0.92; ambIntensity = 0.5; dirIntensity = 0.9;
+                directionalLight.color.setHex(0xffffff);
+            }
+            
+            skyColor.setRGB(skyR, skyG, skyB);
+            if (scene.background && scene.background.isColor) scene.background.copy(skyColor); // Check if background is a Color
+            if (scene.fog) scene.fog.color.copy(skyColor);
+            
+            ambientLight.intensity = ambIntensity;
+            directionalLight.intensity = dirIntensity;
+            updateLightPosition();
+
+            const sunMoonIndicator = document.getElementById('sunMoon');
+            if (hour >= 6 && hour < 20) { // Adjusted to be inclusive of 6:00 for sun
+                sunMoonIndicator.className = 'sun-moon sun';
+            } else {
+                sunMoonIndicator.className = 'sun-moon moon';
+            }
+        }
+
+        function updateLightPosition() {
+            const hour = gameStats.timeOfDay;
+            const sunAngle = ((hour - 6) / 12) * Math.PI; 
+            directionalLight.position.set(
+                Math.cos(sunAngle) * 30,       
+                Math.sin(sunAngle) * 20 + 5,   
+                10                             
+            ).normalize();
+            // If directionalLight has a target, it might need to be updated too, but usually not necessary for sky lights.
+            // directionalLight.target.position.set(0,0,0); scene.add(directionalLight.target);
+        }
+        
+        function updateStatsUI() {
+            document.getElementById('positionDisplay').textContent = 
+                `${Math.round(camera.position.x)}, ${Math.round(camera.position.y)}, ${Math.round(camera.position.z)}`;
+            document.getElementById('blocksPlacedDisplay').textContent = gameStats.blocksPlaced;
+            document.getElementById('blocksBrokenDisplay').textContent = gameStats.blocksBroken;
+            
+            const hour = Math.floor(gameStats.timeOfDay);
+            const minute = Math.floor((gameStats.timeOfDay - hour) * 60);
+            document.getElementById('timeDisplay').textContent = 
+                `Day ${gameStats.day} - ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+
+            const healthHearts = '♥'.repeat(Math.ceil(gameStats.health / 20));
+            const emptyHearts = '♡'.repeat(Math.max(0, 5 - Math.ceil(gameStats.health / 20))); // Ensure not negative
+            document.getElementById('healthDisplay').textContent = `${healthHearts}${emptyHearts} ${gameStats.health}%`;
+
+            const px = Math.round(camera.position.x) + TERRAIN_GRID_SIZE_X / 2;
+            const pz = Math.round(camera.position.z) + TERRAIN_GRID_SIZE_Z / 2;
+            if(px >=0 && px < TERRAIN_GRID_SIZE_X && pz >=0 && pz < TERRAIN_GRID_SIZE_Z){
+                const height = oldTerrainHeights[px]?.[pz] || worldBaseY;
+                 if (height < worldBaseY + 4) document.getElementById('biomeDisplay').textContent = 'Beach/Desert';
+                 else if (height > worldBaseY + terrainHeightScale * 0.7) document.getElementById('biomeDisplay').textContent = 'Mountains';
+                 else document.getElementById('biomeDisplay').textContent = 'Plains';
+            } else {
+                 document.getElementById('biomeDisplay').textContent = 'Unknown';
+            }
+        }
+        
+        function updateMinimap() {
+            minimapCtx.fillStyle = `rgb(${Math.round(skyColor.r*255)}, ${Math.round(skyColor.g*255)}, ${Math.round(skyColor.b*255)})`;
+            minimapCtx.fillRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+            
+            const playerMapX = Math.floor(camera.position.x + TERRAIN_GRID_SIZE_X / 2);
+            const playerMapZ = Math.floor(camera.position.z + TERRAIN_GRID_SIZE_Z / 2);
+            
+            // Minimap shows a fixed area of the world grid, centered on world origin for now
+            // Or, it can show area around player. The current loops suggest area around player
+            const minimapViewRadiusBlocks = minimapCanvas.width / 2; // Show full terrain grid if canvas width = terrain grid width
+            const scale = 1; // if minimapCanvas.width === TERRAIN_GRID_SIZE_X
+
+            for (let ix = 0; ix < TERRAIN_GRID_SIZE_X; ix++) {
+                for (let iz = 0; iz < TERRAIN_GRID_SIZE_Z; iz++) {
+                    const surfaceY = oldTerrainHeights[ix]?.[iz] || worldBaseY;
+                    const blockKey = getBlockKey(ix - TERRAIN_GRID_SIZE_X/2, surfaceY, iz - TERRAIN_GRID_SIZE_Z/2);
+                    const blockData = world[blockKey]; // Could be mesh or placeholder
+                    
+                    let blockColor = 'rgba(0,0,0,0.3)'; 
+                    if (blockData && blockData.userData && blockData.userData.blockTypeName) {
+                        const type = BLOCK_TYPES[blockData.userData.blockTypeName];
+                        if(type && type.color) {
+                            const c = new THREE.Color(type.color);
+                            const heightFactor = Math.min(1, Math.max(0.3, (surfaceY - worldBaseY) / (terrainHeightScale * 1.2)));
+                            blockColor = `rgb(${Math.round(c.r * 255 * heightFactor)}, ${Math.round(c.g * 255 * heightFactor)}, ${Math.round(c.b * 255 * heightFactor)})`;
+                        }
+                    } else if (blockData && !blockData.userData) { // Handle case where blockData might not have userData (e.g. very basic placeholder)
+                         // Potentially fetch type by looking up terrain grid, but oldTerrainHeights is only Y.
+                         // This case should ideally not happen if addBlock always sets userData.
+                    }
+                    
+                    minimapCtx.fillStyle = blockColor;
+                    minimapCtx.fillRect(ix * scale, iz * scale, Math.ceil(scale), Math.ceil(scale));
+                }
+            }
+            
+            minimapCtx.fillStyle = '#FF0000'; // Player dot
+            minimapCtx.beginPath();
+            // Player position on minimap (playerMapX, playerMapZ are grid coords)
+            minimapCtx.arc(playerMapX * scale, playerMapZ * scale, 3, 0, Math.PI * 2);
+            minimapCtx.fill();
+
+            minimapCtx.save();
+            minimapCtx.translate(playerMapX * scale, playerMapZ * scale);
+            minimapCtx.rotate(camera.rotation.y); 
+            minimapCtx.fillStyle = '#FF0000';
+            minimapCtx.beginPath();
+            minimapCtx.moveTo(0, -5 * scale);
+            minimapCtx.lineTo(3 * scale, 2 * scale);
+            minimapCtx.lineTo(-3 * scale, 2 * scale);
+            minimapCtx.closePath();
+            minimapCtx.fill();
+            minimapCtx.restore();
+        }
+        
+        function clearWorldMeshes() {
+            for (const key in world) {
+                if (world[key] && world[key].isMesh) {
+                    scene.remove(world[key]);
+                    world[key].geometry.dispose();
+                    // Materials are shared, so don't dispose them here
+                }
+            }
+            Object.keys(world).forEach(key => { // Clear properties of the const object
+                delete world[key];
+            });
+            
+            pointLights.forEach(light => scene.remove(light));
+            pointLights.clear();
+        }
+
+        async function buildFullWorldFromTerrainGrid(initialBuild = false) {
+            clearWorldMeshes();
+            oldTerrainHeights = new Array(TERRAIN_GRID_SIZE_X).fill(null).map(() => new Int8Array(TERRAIN_GRID_SIZE_Z));
+            const promises = [];
+
+            for (let ix = 0; ix < TERRAIN_GRID_SIZE_X; ix++) {
+                for (let iz = 0; iz < TERRAIN_GRID_SIZE_Z; iz++) {
+                    const baseNoiseHeight = Math.floor(perlin.noise(ix * 0.05, iz * 0.05, 0) * 8); 
+                    const rdValue = terrainGridB[ix]?.[iz] || 0;
+                    let currentHeight = worldBaseY + baseNoiseHeight + Math.floor(rdValue * terrainHeightScale);
+                    currentHeight = Math.max(worldBaseY, Math.min(worldBaseY + terrainHeightScale + 10, currentHeight)); 
+                    
+                    oldTerrainHeights[ix][iz] = currentHeight;
+
+                    const worldX = ix - TERRAIN_GRID_SIZE_X / 2;
+                    const worldZ = iz - TERRAIN_GRID_SIZE_Z / 2;
+
+                    for (let y = worldBaseY - 5; y <= currentHeight; y++) { 
+                        if (y < worldBaseY && Math.random() > 0.3) continue; 
+
+                        let blockTypeName = BLOCK_TYPES.STONE.name;
+                        const depth = currentHeight - y;
+
+                        if (y >= worldBaseY) { 
+                            if (depth === 0) { 
+                                if (currentHeight < worldBaseY + terrainHeightScale * 0.15) blockTypeName = BLOCK_TYPES.SAND.name;
+                                else if (currentHeight < worldBaseY + terrainHeightScale * 0.25 && Math.random() < 0.3) blockTypeName = BLOCK_TYPES.SAND.name; 
+                                else blockTypeName = BLOCK_TYPES.GRASS.name;
+                            } else if (depth <= 2 + Math.random()*2) { 
+                                // If surface was GRASS, layer below is DIRT. If SAND, layer below is SAND. Otherwise DIRT.
+                                const surfaceIsSand = (currentHeight < worldBaseY + terrainHeightScale * 0.15) || 
+                                                      (currentHeight < worldBaseY + terrainHeightScale * 0.25 && Math.random() < 0.3); // Simplified re-check
+                                if (surfaceIsSand) blockTypeName = BLOCK_TYPES.SAND.name;
+                                else blockTypeName = BLOCK_TYPES.DIRT.name;
+
+                            } // else remains STONE (default for deeper layers)
+                        }
+                        promises.push(addBlock(worldX, y, worldZ, blockTypeName, false));
+                    }
+                }
+                 if (initialBuild && ix % Math.floor(TERRAIN_GRID_SIZE_X/10) === 0) { 
+                    await new Promise(resolve => setTimeout(resolve, 0)); 
+                    updateLoadingScreen("Building World...", 50 + (ix / TERRAIN_GRID_SIZE_X) * 30);
+                }
+            }
+            await Promise.all(promises);
+        }
+
+        // updateWorldBasedOnTerrainGridDiff is effectively inlined in animate() loop for terrain updates
+        
+        function generateTreesOnTerrain(treeCount) {
+            for (let i = 0; i < treeCount; i++) {
+                const ix = Math.floor(Math.random() * TERRAIN_GRID_SIZE_X);
+                const iz = Math.floor(Math.random() * TERRAIN_GRID_SIZE_Z);
+
+                const worldX = ix - TERRAIN_GRID_SIZE_X / 2;
+                const worldZ = iz - TERRAIN_GRID_SIZE_Z / 2;
+                const groundY = oldTerrainHeights[ix]?.[iz] || worldBaseY;
+
+                const groundBlockKey = getBlockKey(worldX, groundY, worldZ);
+                // Check if world[groundBlockKey] exists and has userData before accessing blockTypeName
+                if (world[groundBlockKey] && world[groundBlockKey].userData && world[groundBlockKey].userData.blockTypeName === BLOCK_TYPES.GRASS.name) {
+                    if(Math.random() < 0.8){ 
+                        generateTree(worldX, groundY + 1, worldZ);
+                    } else { 
+                        generateLargeTree(worldX, groundY + 1, worldZ);
+                    }
+                }
+            }
+        }
+
+        function generateTree(x, y, z, trunkMaterial = BLOCK_TYPES.WOOD.name, leafMaterial = BLOCK_TYPES.LEAVES.name) {
+            const trunkHeight = 3 + Math.floor(Math.random() * 3);
+            const leafRadius = 2;
+
+            for (let i = 0; i < trunkHeight; i++) {
+                addBlock(x, y + i, z, trunkMaterial, false);
+            }
+
+            const leafYStart = y + trunkHeight -1;
+            for (let ly = -leafRadius +1; ly <= leafRadius; ly++) {
+                for (let lx = -leafRadius; lx <= leafRadius; lx++) {
+                    for (let lz = -leafRadius; lz <= leafRadius; lz++) {
+                        if (lx*lx + (ly*0.8)*(ly*0.8) + lz*lz <= leafRadius*leafRadius *0.8 + Math.random()*0.5) { 
+                            if (!(lx === 0 && lz === 0 && y + trunkHeight -1 + ly < y + trunkHeight)) { // Avoid replacing top of trunk with leaves
+                                addBlock(x + lx, leafYStart + ly, z + lz, leafMaterial, false);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function generateLargeTree(x, y, z) {
+            const trunkHeight = 5 + Math.floor(Math.random() * 4);
+            const baseLeafRadius = 3;
+
+            addBlock(x, y, z, BLOCK_TYPES.WOOD.name, false); // Base of trunk
+            for (let i = 1; i < trunkHeight; i++) { // Trunk itself
+                addBlock(x, y + i, z, BLOCK_TYPES.WOOD.name, false);
+            }
+            
+            for (let ly = -1; ly <= baseLeafRadius; ly++) {
+                let currentRadius = baseLeafRadius - Math.abs(ly - 1); 
+                if (ly < 1) currentRadius = baseLeafRadius * (0.6 + ly * 0.2); 
+
+                for (let lx = -Math.round(currentRadius); lx <= Math.round(currentRadius); lx++) { // Use Math.round for integer iteration
+                    for (let lz = -Math.round(currentRadius); lz <= Math.round(currentRadius); lz++) {
+                        if (lx*lx + lz*lz <= currentRadius*currentRadius + Math.random() * currentRadius) {
+                             if (!(lx === 0 && lz === 0 && y + trunkHeight -1 + ly < y + trunkHeight)) { 
+                                addBlock(x + lx, y + trunkHeight -2 + ly, z + lz, BLOCK_TYPES.LEAVES.name, false);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function generateStructures(count = 3) {
+            for (let i = 0; i < count; i++) {
+                const ix = Math.floor(Math.random() * (TERRAIN_GRID_SIZE_X - 10)) + 5; 
+                const iz = Math.floor(Math.random() * (TERRAIN_GRID_SIZE_Z - 10)) + 5;
+                const worldX = ix - TERRAIN_GRID_SIZE_X / 2;
+                const worldZ = iz - TERRAIN_GRID_SIZE_Z / 2;
+                const groundY = oldTerrainHeights[ix]?.[iz] || worldBaseY;
+
+                let flatEnough = true;
+                for (let dx = -2; dx <= 2; dx++) {
+                    for (let dz = -2; dz <= 2; dz++) {
+                        if (ix + dx >= 0 && ix + dx < TERRAIN_GRID_SIZE_X && iz + dz >= 0 && iz + dz < TERRAIN_GRID_SIZE_Z) {
+                            if (Math.abs((oldTerrainHeights[ix+dx]?.[iz+dz]||worldBaseY) - groundY) > 1) {
+                                flatEnough = false; break;
+                            }
+                        } else { // Edge of map, consider not flat
+                            flatEnough = false; break;
+                        }
+                    }
+                    if (!flatEnough) break;
+                }
+
+                if (flatEnough && groundY > worldBaseY + 2) { 
+                    if (Math.random() < 0.7) generateSimpleHouse(worldX, groundY + 1, worldZ);
+                    else generateSmallRuin(worldX, groundY +1, worldZ);
+                }
+            }
+        }
+
+        function generateSimpleHouse(x, y, z) {
+            const width = 3 + Math.floor(Math.random() * 2); // Half-width
+            const depth = 3 + Math.floor(Math.random() * 2); // Half-depth
+            const height = 2 + Math.floor(Math.random() * 2);
+
+            for (let dy = 0; dy < height; dy++) {
+                for (let dx = -width; dx <= width; dx++) {
+                    addBlock(x + dx, y + dy, z - depth, BLOCK_TYPES.WOOD.name, false);
+                    addBlock(x + dx, y + dy, z + depth, BLOCK_TYPES.WOOD.name, false);
+                }
+                for (let dz = -depth + 1; dz < depth; dz++) { // Fill sides
+                    addBlock(x - width, y + dy, z + dz, BLOCK_TYPES.WOOD.name, false);
+                    addBlock(x + width, y + dy, z + dz, BLOCK_TYPES.WOOD.name, false);
+                }
+            }
+            removeBlock(x, y, z - depth, false); // Doorway
+            removeBlock(x, y + 1, z - depth, false); // Make doorway taller
+
+            for (let dx = -width -1; dx <= width +1; dx++) { 
+                for (let dz = -depth -1; dz <= depth +1; dz++) {
+                    addBlock(x + dx, y + height, z + dz, BLOCK_TYPES.WOOD.name, false);
+                     if(Math.abs(dx) <= width && Math.abs(dz) <= depth){ 
+                         addBlock(x + dx, y + height +1, z + dz, BLOCK_TYPES.WOOD.name, false);
+                     }
+                }
+            }
+        }
+        function generateSmallRuin(x,y,z){
+            const radius = 2 + Math.floor(Math.random()*2);
+            for(let dx = -radius; dx <= radius; dx++){
+                for(let dz = -radius; dz <= radius; dz++){
+                    if(Math.random() < 0.4){ 
+                        const dist = Math.sqrt(dx*dx + dz*dz);
+                        if(dist < radius + 0.5 && dist > radius - 1.5){ 
+                            const wallHeight = 1 + Math.floor(Math.random() * 3);
+                            for(let h=0; h < wallHeight; h++){
+                                if(Math.random() < 0.8) 
+                                    addBlock(x+dx, y+h, z+dz, BLOCK_TYPES.STONE.name, false);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function getBlockKey(x, y, z) {
+            return `${Math.round(x/blockSize)}_${Math.round(y/blockSize)}_${Math.round(z/blockSize)}`;
+        }
+        function getBlock(x,y,z){ // Returns mesh or placeholder
+            return world[getBlockKey(x,y,z)];
+        }
+
+        async function addBlock(x, y, z, blockTypeName, updatePhysics = true, fromPlayer = false) {
+            const blockType = Object.values(BLOCK_TYPES).find(bt => bt.name === blockTypeName);
+            if (!blockType || blockType.id === 0) return;
+
+            const bX = Math.round(x/blockSize);
+            const bY = Math.round(y/blockSize);
+            const bZ = Math.round(z/blockSize);
+            const blockKey = getBlockKey(bX, bY, bZ);
+
+            if (world[blockKey]) return; 
+
+            // If not from player, check distance for creating placeholder vs full mesh
+            if (!fromPlayer) {
+                const playerDistCheckX = camera ? camera.position.x : 0; // Camera might not exist during initial very early calls
+                const playerDistCheckZ = camera ? camera.position.z : 0;
+                const distSqBlockUnits = ((bX * blockSize - playerDistCheckX) / blockSize) ** 2 + 
+                                         ((bZ * blockSize - playerDistCheckZ) / blockSize) ** 2;
+                const renderDistBlocks = 32;
+                const renderDistBlocksSq = renderDistBlocks * renderDistBlocks;
+            
+                if (distSqBlockUnits > renderDistBlocksSq) {
+                    world[blockKey] = { // Placeholder
+                        position: new THREE.Vector3(bX * blockSize, bY * blockSize, bZ * blockSize),
+                        userData: { blockTypeName }, // Ensure userData exists
+                        isMesh: false,
+                        visible: false // Placeholders are not visible
+                    };
+                    return Promise.resolve(); // Don't create mesh yet
+                }
+            }
+            
+            const geometry = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
+            const material = blockType.material;
+            if (!material) {
+                console.warn(`Material not initialized for ${blockTypeName}`);
+                return Promise.resolve();
+            }
+            const mesh = new THREE.Mesh(geometry, material);
+            
+            mesh.position.set(bX * blockSize, bY * blockSize, bZ * blockSize);
+            mesh.userData.blockTypeName = blockTypeName;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            
+            scene.add(mesh);
+            world[blockKey] = mesh; // Overwrites placeholder if it existed
+
+            if (fromPlayer) gameStats.blocksPlaced++;
+
+            if (blockType.lightIntensity && blockType.lightDistance) {
+                const light = new THREE.PointLight(
+                    blockType.emissive || blockType.color, 
+                    blockType.lightIntensity, 
+                    blockType.lightDistance
+                );
+                light.position.copy(mesh.position);
+                scene.add(light);
+                pointLights.set(blockKey, light);
+            }
+            
+            return Promise.resolve(); // Keep async for consistency, though less critical here now
+        }
+
+        function removeBlock(x, y, z, updatePhysics = true, fromPlayer = false) {
+            const bX = Math.round(x/blockSize);
+            const bY = Math.round(y/blockSize);
+            const bZ = Math.round(z/blockSize);
+            const blockKey = getBlockKey(bX, bY, bZ);
+
+            const blockData = world[blockKey];
+            if (blockData) {
+                if (blockData.isMesh) { // If it's a full mesh
+                    scene.remove(blockData);
+                    blockData.geometry.dispose();
+                    // Material is shared, do not dispose
+                }
+                // For placeholders or meshes, remove from world object
+                delete world[blockKey];
+
+                if (fromPlayer) gameStats.blocksBroken++;
+
+                if (pointLights.has(blockKey)) {
+                    const light = pointLights.get(blockKey);
+                    scene.remove(light);
+                    light.dispose && light.dispose(); // Dispose light if possible
+                    pointLights.delete(blockKey);
+                }
+            }
+        }
+
+        function getIntersection() {
+            if (!camera) return null; // Guard against camera not being initialized
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera({x: 0, y: 0}, camera); 
+            
+            const meshes = Object.values(world).filter(m => m && m.isMesh && m.visible); // Only intersect visible meshes
+            if(meshes.length === 0) return null;
+
+            const intersections = raycaster.intersectObjects(meshes, false); 
+            
+            for (let i = 0; i < intersections.length; i++) {
+                if (intersections[i].distance < player.reachDistance) {
+                    return intersections[i];
+                }
+            }
+            return null;
+        }
+        
+        function onKeyDown(event) { 
+            keys[event.code] = true; 
+            if(event.code === 'ShiftLeft') player.isSprinting = true; // Should be ShiftLeft or ShiftRight
+        }
+        function onKeyUp(event) { 
+            keys[event.code] = false; 
+            if(event.code === 'ShiftLeft') player.isSprinting = false;
+
+            if (event.code === 'KeyF') player.flyMode = !player.flyMode;
+            if (event.code === 'KeyC') player.creativeMode = !player.creativeMode;
+            if (event.code === 'KeyE') enhancedEffects = !enhancedEffects; 
+            
+            if (event.code.startsWith('Digit')) {
+                const num = parseInt(event.code.replace('Digit', ''));
+                if (num >= 1 && num <= 9) { // Handle 1-9 keys
+                    const slotIndex = num - 1;
+                    if (slotIndex >= 0 && slotIndex < inventoryBlockTypes.length) {
+                        currentInventorySlot = slotIndex;
+                        currentBlockToPlace = inventoryBlockTypes[currentInventorySlot];
+                        updateInventoryActiveSlot();
+                    }
+                }
+            }
+        }
+        function onMouseWheel(event) {
+            if (controls && !controls.isLocked && !player.creativeMode) return; 
+            event.preventDefault();
+            const scrollDelta = Math.sign(event.deltaY);
+            currentInventorySlot = (currentInventorySlot + scrollDelta + inventoryBlockTypes.length) % inventoryBlockTypes.length;
+            currentBlockToPlace = inventoryBlockTypes[currentInventorySlot];
+            updateInventoryActiveSlot();
+        }
+
+        function onMouseDown(event) {
+            if (controls && !controls.isLocked && !player.creativeMode) return;
+            const intersection = getIntersection();
+            if (intersection && intersection.object && intersection.object.isMesh && intersection.face) {
+                const blockPos = intersection.object.position.clone();
+                const placePos = intersection.object.position.clone().addScaledVector(intersection.face.normal, blockSize);
+                
+                if (event.button === 0) { 
+                    removeBlock(blockPos.x, blockPos.y, blockPos.z, true, true);
+                } else if (event.button === 2) { 
+                     const playerHeadBox = new THREE.Box3().setFromCenterAndSize(
+                         camera.position, new THREE.Vector3(0.6, player.height, 0.6)
+                     );
+                     const blockToPlaceBox = new THREE.Box3().setFromCenterAndSize(
+                        placePos, new THREE.Vector3(blockSize, blockSize, blockSize)
+                     );
+                     if (!playerHeadBox.intersectsBox(blockToPlaceBox)) {
+                        addBlock(placePos.x, placePos.y, placePos.z, currentBlockToPlace, true, true);
+                     }
+                }
+            }
+        }
+
+        function setupUI() {
+            const feedTerrainSlider = document.getElementById('feedRateTerrain');
+            const killTerrainSlider = document.getElementById('killRateTerrain');
+            const heightScaleSlider = document.getElementById('heightScaleTerrain');
+
+            feedTerrainSlider.value = terrainRdParams.f;
+            killTerrainSlider.value = terrainRdParams.k;
+            heightScaleSlider.value = terrainHeightScale;
+
+            document.getElementById('feedRateTerrainVal').textContent = terrainRdParams.f.toFixed(3);
+            document.getElementById('killRateTerrainVal').textContent = terrainRdParams.k.toFixed(3);
+            document.getElementById('heightScaleTerrainVal').textContent = terrainHeightScale;
+
+            feedTerrainSlider.addEventListener('input', (e) => { 
+                terrainRdParams.f = parseFloat(e.target.value);
+                document.getElementById('feedRateTerrainVal').textContent = terrainRdParams.f.toFixed(3);
+            });
+            killTerrainSlider.addEventListener('input', (e) => {
+                terrainRdParams.k = parseFloat(e.target.value);
+                document.getElementById('killRateTerrainVal').textContent = terrainRdParams.k.toFixed(3);
+            });
+            heightScaleSlider.addEventListener('input', (e) => {
+                terrainHeightScale = parseInt(e.target.value);
+                document.getElementById('heightScaleTerrainVal').textContent = terrainHeightScale;
+            });
+
+            document.getElementById('resetTerrainSimButton').addEventListener('click', async () => {
+                showLoadingScreen("Resetting World...", 0);
+                initTerrainRDSimulation();
+                updateLoadingScreen("Simulating Terrain...", 20);
+                for(let i=0; i<30; i++) updateGrayScottForTerrain();
+                updateLoadingScreen("Rebuilding World...", 50);
+                await buildFullWorldFromTerrainGrid(true);
+                updateLoadingScreen("Growing Flora...", 80);
+                generateTreesOnTerrain(Math.floor((TERRAIN_GRID_SIZE_X * TERRAIN_GRID_SIZE_Z) / 100));
+                generateStructures(Math.floor((TERRAIN_GRID_SIZE_X * TERRAIN_GRID_SIZE_Z) / 500)); // Add structures on reset
+                hideLoadingScreen();
+            });
+            document.getElementById('addSeedTerrainButton').addEventListener('click', () => {
+                seedTerrainSim(3); 
+            });
+            document.getElementById('generateStructuresButton').addEventListener('click', () => {
+                 generateStructures(3 + Math.floor(Math.random()*3));
+            });
+        }
+
+        function setupInventory() {
+            const inventoryContainer = document.getElementById('inventory');
+            inventoryContainer.innerHTML = ''; 
+            inventoryBlockTypes.forEach((blockName, index) => {
+                const type = BLOCK_TYPES[blockName];
+                if (!type || !type.material) { // Ensure type and material exist
+                    console.warn("Inventory: Skipping block type due to missing data:", blockName);
+                    return;
+                }
+
+                const slot = document.createElement('div');
+                slot.classList.add('inventory-slot');
+                slot.dataset.block = blockName;
+                if (index === currentInventorySlot) slot.classList.add('active');
+
+                const preview = document.createElement('div');
+                preview.classList.add('block-preview');
+                preview.style.background = `#${type.color.toString(16).padStart(6, '0')}`;
+                if(type.name === "WATER") preview.style.opacity = "0.7";
+                if(type.name === "GLOWSTONE") preview.style.boxShadow = "0 0 8px yellow";
+
+                slot.appendChild(preview);
+                slot.addEventListener('click', () => {
+                    currentInventorySlot = index;
+                    currentBlockToPlace = inventoryBlockTypes[currentInventorySlot];
+                    updateInventoryActiveSlot();
+                });
+                inventoryContainer.appendChild(slot);
+            });
+        }
+        function updateInventoryActiveSlot() {
+            document.querySelectorAll('#inventory .inventory-slot').forEach((slot, index) => {
+                slot.classList.toggle('active', index === currentInventorySlot);
+            });
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            const now = performance.now();
+            const delta = Math.min((now - lastTime) / 1000, 0.1); 
+            lastTime = now;
+            
+            if (terrainRdUpdateCounter % 5 === 0) { // Check/update block visibility less frequently
+                optimizeRendering();
+            }
+            
+            terrainRdUpdateCounter++;
+            if (terrainRdUpdateCounter % 30 === 0) { 
+                updateGrayScottForTerrain();
+                
+                const playerGridX = Math.floor(camera.position.x / blockSize + TERRAIN_GRID_SIZE_X / 2);
+                const playerGridZ = Math.floor(camera.position.z / blockSize + TERRAIN_GRID_SIZE_Z / 2);
+                const updateRadius = 16; // Grid units around player to update
+                
+                for (let ix = Math.max(0, playerGridX - updateRadius); ix < Math.min(TERRAIN_GRID_SIZE_X, playerGridX + updateRadius); ix++) {
+                    for (let iz = Math.max(0, playerGridZ - updateRadius); iz < Math.min(TERRAIN_GRID_SIZE_Z, playerGridZ + updateRadius); iz++) {
+                        const baseNoiseHeight = Math.floor(perlin.noise(ix * 0.05, iz * 0.05, 0) * 8);
+                        const rdValue = terrainGridB[ix]?.[iz] || 0;
+                        let newHeight = worldBaseY + baseNoiseHeight + Math.floor(rdValue * terrainHeightScale);
+                        newHeight = Math.max(worldBaseY, Math.min(worldBaseY + terrainHeightScale + 10, newHeight));
+                        
+                        const oldHeight = oldTerrainHeights[ix]?.[iz] || worldBaseY;
+                        const worldX = ix - TERRAIN_GRID_SIZE_X / 2;
+                        const worldZ = iz - TERRAIN_GRID_SIZE_Z / 2;
+                        
+                        if (newHeight > oldHeight) {
+                            for (let y = oldHeight + 1; y <= newHeight; y++) {
+                                let blockTypeName = BLOCK_TYPES.STONE.name;
+                                const depth = newHeight - y;
+                                if (depth === 0) { 
+                                    blockTypeName = (newHeight < worldBaseY + terrainHeightScale * 0.15) ? BLOCK_TYPES.SAND.name : BLOCK_TYPES.GRASS.name;
+                                } else if (depth <= 2) {
+                                    const surfaceIsSand = (newHeight < worldBaseY + terrainHeightScale * 0.15);
+                                    blockTypeName = surfaceIsSand ? BLOCK_TYPES.SAND.name : BLOCK_TYPES.DIRT.name;
+                                }
+                                addBlock(worldX, y, worldZ, blockTypeName, false);
+                            }
+                        } else if (newHeight < oldHeight) {
+                            for (let y = oldHeight; y > newHeight; y--) {
+                                removeBlock(worldX, y, worldZ, false);
+                            }
+                             // After removing blocks, ensure the new surface block is correct type
+                            const surfaceBlockKey = getBlockKey(worldX, newHeight, worldZ);
+                            const surfaceBlock = world[surfaceBlockKey];
+                            if(surfaceBlock && surfaceBlock.userData && (surfaceBlock.userData.blockTypeName === BLOCK_TYPES.DIRT.name || surfaceBlock.userData.blockTypeName === BLOCK_TYPES.STONE.name)){
+                                removeBlock(worldX, newHeight, worldZ, false); // remove old dirt/stone
+                                addBlock(worldX, newHeight, worldZ, 
+                                    newHeight < worldBaseY + terrainHeightScale * 0.15 ? BLOCK_TYPES.SAND.name : BLOCK_TYPES.GRASS.name, false); // add new surface
+                            }
+                        }
+                        oldTerrainHeights[ix][iz] = newHeight;
+                    }
+                }
+            }
+            
+            if (terrainRdUpdateCounter % 15 === 0) { // Sky/light updates less frequent than terrain sim
+                updateSkyAndLight();
+            }
+            
+            if (terrainRdUpdateCounter % 10 === 0) { // UI stats update
+                updateStatsUI();
+            }
+            
+            minimapUpdateCounter++;
+            if (minimapUpdateCounter % 60 === 0) { // Minimap update even less frequent
+                updateMinimap();
+            }
+            
+            if (player.flyMode && player.creativeMode) {
+                handleFlyMovement(delta);
+                player.onGround = false; 
+                player.velocity.y = 0;
+            } else {
+                // Only allow movement if controls are locked or in creative (for debugging/no-clip style)
+                if ((controls && controls.isLocked) || player.creativeMode) {
+                    handlePlayerMovement(delta);
+                }
+                applyPlayerPhysics(delta);
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        function optimizeRendering() {
+            const playerPos = camera.position;
+            const renderDistBlocks = 32; // Radius in block units
+            const renderDistSq = renderDistBlocks * renderDistBlocks; // Squared distance in block units
+
+            for (const blockKey in world) {
+                const block = world[blockKey];
+                
+                if (!block) continue;
+
+                if (!block.isMesh) {
+                    // Potentially convert placeholder to mesh if it comes into range
+                    const blockWorldPos = block.position; // Placeholders have a position
+                    const bX_placeholder = blockWorldPos.x / blockSize;
+                    const bZ_placeholder = blockWorldPos.z / blockSize;
+                    const pX_placeholder = playerPos.x / blockSize;
+                    const pZ_placeholder = playerPos.z / blockSize;
+                    const distSq_placeholder = (bX_placeholder - pX_placeholder)**2 + (bZ_placeholder - pZ_placeholder)**2;
+
+                    if (distSq_placeholder <= renderDistSq && block.userData && block.userData.blockTypeName) {
+                        // console.log("Meshing placeholder:", blockKey);
+                        // This await might be an issue if optimizeRendering is expected to be sync.
+                        // For simplicity, making addBlock handle this logic internally for now,
+                        // or a separate system for dynamic meshing based on these placeholders.
+                        // For now, this function focuses on visibility of existing meshes.
+                        // A proper solution would queue this for meshing.
+                        // addBlock(blockWorldPos.x, blockWorldPos.y, blockWorldPos.z, block.userData.blockTypeName, false);
+                    }
+                    continue; 
+                }
+                
+                // For existing meshes, toggle visibility
+                const blockMeshPos = block.position; // World units
+                const bX = blockMeshPos.x / blockSize;
+                const bZ = blockMeshPos.z / blockSize;
+                const pX = playerPos.x / blockSize;
+                const pZ = playerPos.z / blockSize;
+
+                const dx = bX - pX;
+                const dz = bZ - pZ;
+                const distSq = dx * dx + dz * dz; 
+                
+                block.visible = distSq <= renderDistSq;
+            }
+        }
+
+        function handleFlyMovement(delta) {
+            if (!controls) return; // Guard if controls aren't initialized
+            const currentSpeed = (player.isSprinting ? player.sprintSpeed : player.speed) * 1.5; 
+            const moveSpeed = currentSpeed * delta;
+            if (keys['KeyW'] || keys['ArrowUp']) controls.moveForward(moveSpeed);
+            if (keys['KeyS'] || keys['ArrowDown']) controls.moveForward(-moveSpeed);
+            if (keys['KeyA'] || keys['ArrowLeft']) controls.moveRight(-moveSpeed);
+            if (keys['KeyD'] || keys['ArrowRight']) controls.moveRight(moveSpeed);
+            if (keys['Space']) camera.position.y += moveSpeed;
+            if (keys['ShiftLeft'] || keys['ControlLeft']) camera.position.y -= moveSpeed; // Allow Ctrl for down too
+        }
+
+        function handlePlayerMovement(delta) {
+            if (!controls) return; // Guard
+            const currentSpeed = player.isSprinting ? player.sprintSpeed : player.speed;
+            const moveSpeed = currentSpeed * delta;
+            // Note: PointerLockControls.moveForward/Right modify camera.position directly
+            if (keys['KeyW'] || keys['ArrowUp']) controls.moveForward(moveSpeed);
+            if (keys['KeyS'] || keys['ArrowDown']) controls.moveForward(-moveSpeed);
+            if (keys['KeyA'] || keys['ArrowLeft']) controls.moveRight(-moveSpeed);
+            if (keys['KeyD'] || keys['ArrowRight']) controls.moveRight(moveSpeed);
+            if ((keys['Space']) && player.onGround) player.velocity.y = player.jumpVelocity;
+        }
+
+        function applyPlayerPhysics(delta) {
+            const oldPosition = camera.position.clone(); // Position after XZ input, before Y physics for this frame
+            const newPositionForY = camera.position.clone(); // Used to calculate Y movement
+
+            if (!player.onGround) {
+                player.velocity.y -= 9.81 * 2.5 * delta; // Apply gravity
+            }
+            newPositionForY.y += player.velocity.y * delta; // Potential new Y
+
+            const playerHalfWidth = 0.3; // Player's AABB half-width for XZ
+            
+            // Define player's bounding box for Y collision check
+            // X and Z are from oldPosition (which is after player input for XZ)
+            // Y is from newPositionForY (after gravity/jump velocity)
+            const playerMinY = newPositionForY.y - player.height + 0.1; // Feet + epsilon
+            const playerMaxY = newPositionForY.y - 0.1;                 // Head - epsilon
+
+            const checkMinX = Math.floor((oldPosition.x - playerHalfWidth) / blockSize) -1;
+            const checkMaxX = Math.ceil((oldPosition.x + playerHalfWidth) / blockSize) +1;
+            const checkMinZ = Math.floor((oldPosition.z - playerHalfWidth) / blockSize) -1;
+            const checkMaxZ = Math.ceil((oldPosition.z + playerHalfWidth) / blockSize) +1;
+            const checkMinBlockY = Math.floor(playerMinY / blockSize) -1;
+            const checkMaxBlockY = Math.ceil(playerMaxY / blockSize) +1;
+            
+            player.onGround = false;
+            let resolvedY = newPositionForY.y; // Start with gravity-applied Y
+
+            yCollisionCheck:
+            for (let bx = checkMinX; bx <= checkMaxX; bx++) {
+                for (let bz = checkMinZ; bz <= checkMaxZ; bz++) {
+                    for (let by = checkMinBlockY; by <= checkMaxBlockY; by++) {
+                        const block = getBlock(bx * blockSize, by * blockSize, bz * blockSize);
+                        if (block && block.isMesh && block.visible) { // Check only visible, solid meshes
+                            const blockBox = new THREE.Box3().setFromObject(block);
+                            // Check XZ overlap first for this column
+                            if (oldPosition.x + playerHalfWidth > blockBox.min.x &&
+                                oldPosition.x - playerHalfWidth < blockBox.max.x &&
+                                oldPosition.z + playerHalfWidth > blockBox.min.z &&
+                                oldPosition.z - playerHalfWidth < blockBox.max.z) {
+                                // Now check Y overlap
+                                if (playerMaxY > blockBox.min.y && playerMinY < blockBox.max.y) {
+                                    // Collision on Y detected
+                                    if (player.velocity.y <= 0 && oldPosition.y - player.height + 0.1 >= blockBox.max.y - 0.01) { // Landing
+                                        resolvedY = blockBox.max.y + player.height - 0.1;
+                                        player.velocity.y = 0;
+                                        player.onGround = true;
+                                    } else if (player.velocity.y > 0 && oldPosition.y -0.1 <= blockBox.min.y + 0.01) { // Hitting head
+                                        resolvedY = blockBox.min.y + 0.1;
+                                        player.velocity.y = 0;
+                                    }
+                                    // If collision on Y axis, no need to check other blocks in this XZ column for Y.
+                                    // However, need to check all columns. If onGround, can break outer loops too.
+                                    if (player.onGround) break yCollisionCheck; // Exit all loops if ground found
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            camera.position.y = resolvedY;
+
+            // XZ Collision (camera.position.x/z are already updated by PointerLockControls)
+            // We check if this new XZ position is valid.
+            if ((controls && controls.isLocked) || player.creativeMode) { // Only do XZ collision if movement was attempted
+                const intendedX = camera.position.x; // Target X from player input
+                const intendedZ = camera.position.z; // Target Z from player input
+                
+                // X,Z position from *before* player input this frame (approximated by oldPosition before XZ input was added)
+                // For simplicity, if collision, we revert to oldPosition.x/z (state at start of physics step)
+                const initialXForXZStep = oldPosition.x; 
+                const initialZForXZStep = oldPosition.z;
+
+                let finalX = intendedX;
+                let finalZ = intendedZ;
+
+                // Check X-axis
+                const playerBoxForXCheck = new THREE.Box3(
+                    new THREE.Vector3(intendedX - playerHalfWidth, camera.position.y - player.height + 0.1, initialZForXZStep - playerHalfWidth),
+                    new THREE.Vector3(intendedX + playerHalfWidth, camera.position.y - 0.1, initialZForXZStep + playerHalfWidth)
+                );
+                let collisionX = false;
+                for (let bx = Math.floor(playerBoxForXCheck.min.x/blockSize)-1; bx <= Math.ceil(playerBoxForXCheck.max.x/blockSize)+1; bx++) {
+                    for (let bz = Math.floor(playerBoxForXCheck.min.z/blockSize)-1; bz <= Math.ceil(playerBoxForXCheck.max.z/blockSize)+1; bz++) {
+                        for (let by = Math.floor(playerBoxForXCheck.min.y/blockSize)-1; by <= Math.ceil(playerBoxForXCheck.max.y/blockSize)+1; by++) {
+                             const block = getBlock(bx * blockSize, by * blockSize, bz * blockSize);
+                            if (block && block.isMesh && block.visible && playerBoxForXCheck.intersectsBox(new THREE.Box3().setFromObject(block))) {
+                                collisionX = true; break;
+                            }
+                        } if (collisionX) break;
+                    } if (collisionX) break;
+                }
+                if (collisionX) finalX = initialXForXZStep;
+                camera.position.x = finalX; // Set resolved X
+
+                // Check Z-axis (using resolved X)
+                 const playerBoxForZCheck = new THREE.Box3(
+                    new THREE.Vector3(camera.position.x - playerHalfWidth, camera.position.y - player.height + 0.1, intendedZ - playerHalfWidth),
+                    new THREE.Vector3(camera.position.x + playerHalfWidth, camera.position.y - 0.1, intendedZ + playerHalfWidth)
+                );
+                let collisionZ = false;
+                 for (let bx = Math.floor(playerBoxForZCheck.min.x/blockSize)-1; bx <= Math.ceil(playerBoxForZCheck.max.x/blockSize)+1; bx++) {
+                    for (let bz = Math.floor(playerBoxForZCheck.min.z/blockSize)-1; bz <= Math.ceil(playerBoxForZCheck.max.z/blockSize)+1; bz++) {
+                        for (let by = Math.floor(playerBoxForZCheck.min.y/blockSize)-1; by <= Math.ceil(playerBoxForZCheck.max.y/blockSize)+1; by++) {
+                             const block = getBlock(bx * blockSize, by * blockSize, bz * blockSize);
+                            if (block && block.isMesh && block.visible && playerBoxForZCheck.intersectsBox(new THREE.Box3().setFromObject(block))) {
+                                collisionZ = true; break;
+                            }
+                        } if (collisionZ) break;
+                    } if (collisionZ) break;
+                }
+                if (collisionZ) finalZ = initialZForXZStep;
+                camera.position.z = finalZ; // Set resolved Z
+            }
+
+            if (camera.position.y < worldBaseY - 20) { // Fall recovery
+                camera.position.set(TERRAIN_GRID_SIZE_X/4, worldBaseY + terrainHeightScale + player.height + 5, TERRAIN_GRID_SIZE_Z/4); // Respawn near center
+                player.velocity.set(0,0,0);
+                player.onGround = false; 
+            }
+        }
+    </script>
+</body>
+</html>
