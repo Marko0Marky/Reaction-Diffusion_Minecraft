@@ -178,6 +178,32 @@
         #loading-bar-container { width: 80%; max-width: 300px; height: 20px; background: #444; border-radius: 10px; overflow: hidden; margin: 0 auto;}
         #loading-bar { width: 0%; height: 100%; background: #0f0; transition: width 0.5s ease; }
 
+        #start-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        #start-button {
+            font-size: 2rem;
+            padding: 1em 2em;
+            border-radius: 12px;
+            background: #0f0;
+            color: #111;
+            font-family: 'Orbitron', monospace;
+            border: none;
+            box-shadow: 0 4px 32px #0f08;
+            cursor: pointer;
+        }
+
     </style>
 </head>
 <body>
@@ -254,6 +280,17 @@
         C: Toggle Creative | E: Toggle Effects
     </div>
 
+    <div id="start-overlay" style="
+        position:fixed;top:0;left:0;width:100vw;height:100vh;
+        background:rgba(0,0,0,0.7);z-index:2000;display:flex;
+        align-items:center;justify-content:center;flex-direction:column;">
+        <button id="start-button" style="
+            font-size:2rem;padding:1em 2em;border-radius:12px;
+            background:#0f0;color:#111;font-family:'Orbitron',monospace;
+            border:none;box-shadow:0 4px 32px #0f08;
+            cursor:pointer;">Click to Play</button>
+    </div>
+
     <script type="importmap">
         {
             "imports": {
@@ -266,7 +303,6 @@
         import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
         import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js';
-
 
         let scene, camera, renderer, controls;
         const world = {}; // Store blocks as world[key] = mesh or placeholder
@@ -397,6 +433,16 @@
                 controls.addEventListener('unlock', function() {
                     document.getElementById('crosshair').style.display = 'none';
                 });
+
+                // --- Pointer Lock Overlay Setup (moved here to ensure controls is initialized) ---
+                const startOverlay = document.getElementById('start-overlay');
+                const startButton = document.getElementById('start-button');
+                if (startOverlay && startButton) {
+                    startButton.addEventListener('click', () => {
+                        controls.lock();
+                        startOverlay.style.display = 'none';
+                    });
+                }
             }
             
             document.addEventListener('click', function(event) {
